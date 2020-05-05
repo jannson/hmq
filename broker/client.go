@@ -137,9 +137,15 @@ func (c *client) readLoop() {
 				}
 			}
 
+			if c.typ == REMOTE {
+				log.Warn("read packet reading")
+			}
 			packet, err := packets.ReadPacket(nc)
+			if c.typ == REMOTE {
+				log.Warn("read packet readed")
+			}
 			if err != nil {
-				log.Error("read packet error: ", zap.Error(err), zap.String("ClientID", c.info.clientID))
+				log.Error("read packet error: ", zap.Error(err), zap.String("ClientID", c.info.clientID), zap.Int32("Timeout", int32(c.info.keepalive)))
 				msg := &Message{
 					client: c,
 					packet: DisconnectdPacket,
@@ -165,7 +171,7 @@ func ProcessMessage(msg *Message) {
 		return
 	}
 
-	if c.typ == CLIENT {
+	if c.typ == CLIENT || c.typ == ROUTER || c.typ == REMOTE {
 		log.Debug("Recv message:", zap.String("message type", reflect.TypeOf(msg.packet).String()[9:]), zap.String("ClientID", c.info.clientID))
 	}
 
@@ -343,6 +349,8 @@ func (c *client) ProcessSubscribe(packet *packets.SubscribePacket) {
 	case CLIENT:
 		c.processClientSubscribe(packet)
 	case ROUTER:
+		fallthrough
+	case REMOTE:
 		c.processRouterSubscribe(packet)
 	}
 }

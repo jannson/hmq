@@ -29,12 +29,19 @@ func (c *client) StartPing() {
 	for {
 		select {
 		case <-timeTicker.C:
+			if c.typ == REMOTE {
+				log.Warn("pinging ok")
+			}
 			err := c.WriterPacket(ping)
 			if err != nil {
 				log.Error("ping error: ", zap.Error(err))
 				c.Close()
 			}
+			if c.typ == REMOTE {
+				log.Warn("ping ok")
+			}
 		case <-c.ctx.Done():
+			log.Warn("ping done")
 			return
 		}
 	}
@@ -46,6 +53,8 @@ func (c *client) SendConnect() {
 		return
 	}
 	m := packets.NewControlPacket(packets.Connect).(*packets.ConnectPacket)
+	m.ProtocolName = "MQIsdp"
+	m.ProtocolVersion = 3
 
 	m.CleanSession = true
 	m.ClientIdentifier = c.info.clientID

@@ -114,7 +114,11 @@ func delSubMap(m map[string]uint64, topic string) uint64 {
 }
 
 func GenUniqueId() string {
-	return uuid.NewV4().String()
+	v, err := uuid.NewV4()
+	if err != nil {
+		panic("gen uuid failed, err=" + err.Error())
+	}
+	return v.String()
 }
 
 func wrapPublishPacket(packet *packets.PublishPacket) *packets.PublishPacket {

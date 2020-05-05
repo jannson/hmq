@@ -251,6 +251,8 @@ func (b *Broker) StartClusterListening() {
 
 func (b *Broker) handleConnection(typ int, conn net.Conn) {
 	//process connect packet
+	// TODO set timeout for first connect
+	conn.SetReadDeadline(time.Now().Add(time.Second * 10))
 	packet, err := packets.ReadPacket(conn)
 	if err != nil {
 		log.Error("read connect packet error: ", zap.Error(err))
@@ -266,13 +268,14 @@ func (b *Broker) handleConnection(typ int, conn net.Conn) {
 		return
 	}
 
-	log.Info("read connect from ", zap.String("clientID", msg.ClientIdentifier))
+	log.Info("read connect from ", zap.String("clientID", msg.ClientIdentifier), zap.Int32("type", int32(typ)))
 
 	connack := packets.NewControlPacket(packets.Connack).(*packets.ConnackPacket)
 	connack.SessionPresent = msg.CleanSession
 	connack.ReturnCode = msg.Validate()
 
 	if connack.ReturnCode != packets.Accepted {
+		log.Info("read not accept", zap.String("clientID", msg.ClientIdentifier), zap.Int32("returnCode", int32(connack.ReturnCode)), zap.String("packet=", connack.String()), zap.String("msg", msg.String()))
 		err = connack.Write(conn)
 		if err != nil {
 			log.Error("send connack error, ", zap.Error(err), zap.String("clientID", msg.ClientIdentifier))
@@ -365,10 +368,15 @@ func (b *Broker) handleConnection(typ int, conn net.Conn) {
 				ol.Close()
 			}
 		}
+		log.Info("routerAdd", zap.String("clientId", cid))
 		b.routes.Store(cid, c)
 	}
 
+	log.Info("readLoop", zap.Int32("typ", int32(typ)))
 	c.readLoop()
+	// not start ping at server side !
+	// the server side response pong to the client ping
+	//go c.StartPing()
 }
 
 func (b *Broker) ConnectToDiscovery() {
@@ -572,11 +580,13 @@ func (b *Broker) BroadcastInfoMessage(remoteID string, msg *packets.PublishPacke
 }
 
 func (b *Broker) BroadcastSubOrUnsubMessage(packet packets.ControlPacket) {
-
+	log.Info("broadcasting outside")
 	b.routes.Range(func(key, value interface{}) bool {
+		log.Info("broadcasting inside")
 		r, ok := value.(*client)
 		if ok {
-			r.WriterPacket(packet)
+			err := r.WriterPacket(packet)
+			log.Info("broadcast to", zap.String("remoteIP", r.info.remoteIP), zap.Error(err))
 		}
 		return true
 	})
@@ -585,6 +595,7 @@ func (b *Broker) BroadcastSubOrUnsubMessage(packet packets.ControlPacket) {
 
 func (b *Broker) removeClient(c *client) {
 	clientId := string(c.info.clientID)
+	log.Info("removeClient", zap.String("clientId", clientId))
 	typ := c.typ
 	switch typ {
 	case CLIENT:
